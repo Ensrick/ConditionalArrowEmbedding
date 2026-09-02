@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Ensrick/ConditionalArrowEmbedding/blob/main/config/ConditionalArrowEmbedding.schema.json",
+  "title": "Conditional Arrow Embedding configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "enabled",
+    "affectPlayer",
+    "affectNPCs",
+    "debugLogging",
+    "bodyStickBelowHealthRatio",
+    "fallbackHeadAncestorDepth",
+    "fallbackHeadNodeTokens"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "enabled": { "type": "boolean" },
+    "affectPlayer": { "type": "boolean" },
+    "affectNPCs": { "type": "boolean" },
+    "debugLogging": { "type": "boolean" },
+    "bodyStickBelowHealthRatio": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "fallbackHeadAncestorDepth": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 8
+    },
+    "fallbackHeadNodeTokens": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

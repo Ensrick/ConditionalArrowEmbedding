@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/run-vcpkg@v11
+      - name: Configure
+        shell: cmd
+        run: >-
+          cmake --preset release
+          -DCMAKE_MAKE_PROGRAM=ninja
+          -DCOMMONLIB_PREBUILT=OFF
+          -DENABLE_SKYRIM_VR=OFF
+      - name: Build
+        run: cmake --build build/release
+      - name: Test
+        run: ctest --test-dir build/release --output-on-failure
+      - name: Audit binary
+        shell: powershell
+        run: ./tools/audit-binary.ps1
+      - name: Package
+        shell: pwsh
+        run: ./tools/package.ps1 -AllowDirty
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ConditionalArrowEmbedding-${{ github.sha }}
+          path: build/release/packages/*
+          if-no-files-found: error

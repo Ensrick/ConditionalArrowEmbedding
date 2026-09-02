@@ -1,0 +1,19 @@
+{
+  "$schema": "./ConditionalArrowEmbedding.schema.json",
+  "schemaVersion": 1,
+  "enabled": true,
+  "affectPlayer": true,
+  "affectNPCs": true,
+  "debugLogging": false,
+  "bodyStickBelowHealthRatio": 0.5,
+  "fallbackHeadAncestorDepth": 3,
+  "fallbackHeadNodeTokens": [
+    "head",
+    "skull",
+    "face",
+    "eye",
+    "jaw",
+    "brow",
+    "nose"
+  ]
+}

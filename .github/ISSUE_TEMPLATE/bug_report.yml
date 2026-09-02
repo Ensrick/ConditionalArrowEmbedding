@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a crash, compatibility problem, or incorrect impact decision.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not upload saves or logs that contain private information.
+  - type: input
+    id: runtime
+    attributes:
+      label: Skyrim and SKSE versions
+      placeholder: Skyrim 1.7.104.0, SKSE 2.3.1
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: native_mods
+    attributes:
+      label: Other projectile or locational-damage DLLs
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpts or links
