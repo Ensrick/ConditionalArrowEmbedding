@@ -110,8 +110,8 @@ try {
         schemaVersion = 1
         name = 'Conditional Arrow Embedding'
         version = $Version
-        runtime = @{ skyrim = '1.7.104.0'; skse = '2.3.1' }
-        source = @{ repository = 'https://github.com/Ensrick/ConditionalArrowEmbedding'; commit = $commit; dirty = $dirty }
+        runtime = [ordered]@{ skyrim = '1.7.104.0'; skse = '2.3.1' }
+        source = [ordered]@{ repository = 'https://github.com/Ensrick/ConditionalArrowEmbedding'; commit = $commit; dirty = $dirty }
         commonLibSseNgCommit = 'a9d7d4523d5e1abc8b296bd99683b7df11df652f'
     }
     Write-Utf8 (Join-Path $payloadRoot 'BUILD-INFO.json') ($buildInfo | ConvertTo-Json -Depth 6)
