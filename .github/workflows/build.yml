@@ -13,29 +13,21 @@ jobs:
   windows:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-      - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/run-vcpkg@v11
-      - name: Configure
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11.6
+      - name: Build, test, and audit
         shell: cmd
-        run: >-
-          cmake --preset release
-          -DCMAKE_MAKE_PROGRAM=ninja
-          -DCOMMONLIB_PREBUILT=OFF
-          -DENABLE_SKYRIM_VR=OFF
-      - name: Build
-        run: cmake --build build/release
-      - name: Test
-        run: ctest --test-dir build/release --output-on-failure
-      - name: Audit binary
-        shell: powershell
-        run: ./tools/audit-binary.ps1
+        run: |
+          call tools\build.bat
+          set "CAE_RESULT=%ERRORLEVEL%"
+          type tools\build.log
+          exit /b %CAE_RESULT%
       - name: Package
         shell: pwsh
         run: ./tools/package.ps1 -AllowDirty
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ConditionalArrowEmbedding-${{ github.sha }}
           path: build/release/packages/*

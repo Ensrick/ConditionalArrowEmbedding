@@ -10,6 +10,7 @@ for /f "usebackq tokens=*" %%I in (`"%VSWHERE%" -latest -products * -requires Mi
 if not defined CAE_VSROOT goto :fail
 call "%CAE_VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
 if errorlevel 1 goto :fail
+if not defined CAE_VCPKG_ROOT if defined VCPKG_ROOT set "CAE_VCPKG_ROOT=%VCPKG_ROOT%"
 if not defined CAE_VCPKG_ROOT set "CAE_VCPKG_ROOT=%USERPROFILE%\source\repos\vcpkg"
 set "VCPKG_ROOT=%CAE_VCPKG_ROOT%"
 if not exist "%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" goto :fail
