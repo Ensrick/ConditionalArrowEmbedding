@@ -5,6 +5,7 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -13,6 +14,10 @@ using ConditionalArrowEmbedding::DecideImpact;
 using ConditionalArrowEmbedding::HitRegion;
 using ConditionalArrowEmbedding::ImpactAction;
 using ConditionalArrowEmbedding::ImpactContext;
+using ConditionalArrowEmbedding::IsLivingHumanoidTarget;
+using ConditionalArrowEmbedding::PostDamageState;
+using ConditionalArrowEmbedding::TargetTypeTraits;
+using ConditionalArrowEmbedding::WasKilledByHit;
 
 int failures = 0;
 
@@ -32,6 +37,56 @@ ImpactContext BodyAt(const double a_healthRatio) {
 } // namespace
 
 int main() {
+	{
+		TargetTypeTraits traits{.hasRace = true, .actorTypeNPC = true};
+		Expect(IsLivingHumanoidTarget(traits), "ActorTypeNPC actor with a race is eligible");
+		traits.actorTypeNPC = false;
+		Expect(!IsLivingHumanoidTarget(traits), "untagged race fails open");
+		traits.actorTypeNPC = true;
+		traits.hasRace = false;
+		Expect(!IsLivingHumanoidTarget(traits), "missing race fails open");
+	}
+	{
+		using Member = bool TargetTypeTraits::*;
+		const std::vector<std::pair<Member, const char *>> exclusions{
+		    {&TargetTypeTraits::actorTypeAnimal, "animal excluded"},
+		    {&TargetTypeTraits::actorTypeCreature, "creature excluded"},
+		    {&TargetTypeTraits::actorTypeDaedra, "daedra excluded"},
+		    {&TargetTypeTraits::actorTypeDragon, "dragon excluded"},
+		    {&TargetTypeTraits::actorTypeDwarven, "construct excluded"},
+		    {&TargetTypeTraits::actorTypeGhost, "ghost excluded"},
+		    {&TargetTypeTraits::actorTypeUndead, "undead excluded"},
+		    {&TargetTypeTraits::ghost, "engine ghost state excluded"},
+		    {&TargetTypeTraits::reanimated, "reanimated actor excluded"},
+		    {&TargetTypeTraits::excludedVanillaUtilityRace, "vanilla utility race excluded"},
+		};
+		for (const auto &[member, name] : exclusions) {
+			TargetTypeTraits traits{.hasRace = true, .actorTypeNPC = true};
+			traits.*member = true;
+			Expect(!IsLivingHumanoidTarget(traits), name);
+		}
+	}
+	{
+		Expect(WasKilledByHit(PostDamageState{
+		           .targetWasAlive = false, .hitMarkedFatal = true, .healthAfter = 0.0}) == false,
+		       "pre-existing death is not attributed to hit");
+		Expect(WasKilledByHit(PostDamageState{.hitMarkedFatal = true}), "fatal HitData signal");
+		Expect(WasKilledByHit(PostDamageState{.targetReportsDead = true}), "engine dead signal");
+		Expect(WasKilledByHit(PostDamageState{.targetLifeStateDyingOrDead = true}),
+		       "dying life-state signal");
+		Expect(WasKilledByHit(PostDamageState{.healthAfter = 0.0}), "zero-health lethal fallback");
+		Expect(WasKilledByHit(PostDamageState{.healthAfter = -10.0}), "negative-health lethal fallback");
+		Expect(!WasKilledByHit(PostDamageState{.targetInNonlethalDownState = true, .healthAfter = 0.0}),
+		       "essential bleedout is not lethal");
+		Expect(!WasKilledByHit(PostDamageState{.hitMarkedFatal = true,
+		                                       .targetReportsDead = true,
+		                                       .targetInNonlethalDownState = true,
+		                                       .healthAfter = 0.0}),
+		       "explicit nonlethal down state overrides ambiguous fatal signals");
+		Expect(!WasKilledByHit(PostDamageState{.healthAfter = 0.01}), "positive health is nonlethal");
+		Expect(!WasKilledByHit(PostDamageState{.healthAfter = std::numeric_limits<double>::quiet_NaN()}),
+		       "unknown health fails open");
+	}
 	{
 		auto context = BodyAt(1.0);
 		context.enabled = false;
@@ -62,6 +117,20 @@ int main() {
 		auto context = BodyAt(1.0);
 		context.affectNPCs = false;
 		Expect(DecideImpact(context) == ImpactAction::PreserveVanilla, "NPCs disabled");
+	}
+	{
+		for (const auto region : {HitRegion::Unknown, HitRegion::Head, HitRegion::Body}) {
+			for (const auto health : {0.1, 0.5, 1.0}) {
+				for (const auto killed : {false, true}) {
+					auto context = BodyAt(health);
+					context.region = region;
+					context.targetKilledByHit = killed;
+					context.targetIsLivingHumanoid = false;
+					Expect(DecideImpact(context) == ImpactAction::PreserveVanilla,
+					       "non-humanoid target always preserves vanilla");
+				}
+			}
+		}
 	}
 	{
 		auto context = BodyAt(1.0);

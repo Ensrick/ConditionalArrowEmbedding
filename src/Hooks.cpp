@@ -6,6 +6,10 @@
 namespace ConditionalArrowEmbedding::Hooks {
 namespace {
 Config g_config{};
+inline constexpr RE::FormID ActorTypeCreatureFormID = 0x00013795;
+inline constexpr RE::FormID ActorTypeGhostFormID = 0x000D205E;
+inline constexpr RE::FormID InvisibleRaceFormID = 0x00071E6A;
+inline constexpr RE::FormID ManakinRaceFormID = 0x0010760A;
 
 [[nodiscard]] bool IsExpectedProjectileHitCallsite(const std::uintptr_t a_address) noexcept {
 	// SkyrimSE 1.7.104, MissileProjectile::ProcessImpacts (Address Library
@@ -22,6 +26,30 @@ Config g_config{};
 
 [[nodiscard]] bool IsEmbedResult(const RE::ImpactResult a_result) noexcept {
 	return a_result == RE::ImpactResult::kStick || a_result == RE::ImpactResult::kImpale;
+}
+
+[[nodiscard]] bool HasSkyrimKeyword(const RE::Character &a_target, const RE::FormID a_formID) {
+	const auto *keyword = RE::TESForm::LookupByID<RE::BGSKeyword>(a_formID);
+	return keyword && a_target.HasKeyword(keyword);
+}
+
+[[nodiscard]] TargetTypeTraits CollectTargetTypeTraits(RE::Character &a_target) {
+	const auto *race = a_target.GetRace();
+	const auto raceFormID = race ? race->GetFormID() : 0;
+	return TargetTypeTraits{
+	    .hasRace = race != nullptr,
+	    .actorTypeNPC = a_target.IsHumanoid(),
+	    .actorTypeAnimal = a_target.HasKeywordWithType(RE::DefaultObjectID::kKeywordAnimal),
+	    .actorTypeCreature = HasSkyrimKeyword(a_target, ActorTypeCreatureFormID),
+	    .actorTypeDaedra = a_target.HasKeywordWithType(RE::DefaultObjectID::kKeywordDaedra),
+	    .actorTypeDragon = a_target.IsDragon(),
+	    .actorTypeDwarven = a_target.HasKeywordWithType(RE::DefaultObjectID::kKeywordRobot),
+	    .actorTypeGhost = HasSkyrimKeyword(a_target, ActorTypeGhostFormID),
+	    .actorTypeUndead = a_target.HasKeywordWithType(RE::DefaultObjectID::kKeywordUndead),
+	    .ghost = a_target.IsGhost(),
+	    .reanimated = a_target.IsReanimated(),
+	    .excludedVanillaUtilityRace = raceFormID == InvisibleRaceFormID || raceFormID == ManakinRaceFormID,
+	};
 }
 
 [[nodiscard]] float DistanceSquared(const RE::NiPoint3 &a_left, const RE::NiPoint3 &a_right) noexcept {
@@ -70,7 +98,7 @@ Config g_config{};
 }
 
 void ApplyPostDamageDecision(RE::Character &a_target, RE::HitData &a_hitData, const bool a_targetWasAlive,
-                             RE::Projectile &a_projectile) {
+                             const bool a_targetIsLivingHumanoid, RE::Projectile &a_projectile) {
 	if (a_projectile.GetFormType() != RE::FormType::ProjectileArrow) {
 		return;
 	}
@@ -93,15 +121,24 @@ void ApplyPostDamageDecision(RE::Character &a_target, RE::HitData &a_hitData, co
 	    IsEmbedResult(missileData.impactResult) || IsEmbedResult(impact->impactResult);
 	const bool blockedOrRicocheting =
 	    a_hitData.flags.any(RE::HitData::Flag::kBlocked) || a_hitData.flags.any(RE::HitData::Flag::kRicochet);
-	const bool killedByHit =
-	    a_targetWasAlive && (a_hitData.flags.any(RE::HitData::Flag::kFatal) || a_target.IsDead());
-
+	const auto healthAfter =
+	    static_cast<double>(a_target.AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth));
+	const auto lifeState = a_target.GetLifeState();
+	const bool killedByHit = WasKilledByHit(PostDamageState{
+	    .targetWasAlive = a_targetWasAlive,
+	    .hitMarkedFatal = a_hitData.flags.any(RE::HitData::Flag::kFatal),
+	    .targetReportsDead = a_target.IsDead(),
+	    .targetLifeStateDyingOrDead =
+	        lifeState == RE::ACTOR_LIFE_STATE::kDying || lifeState == RE::ACTOR_LIFE_STATE::kDead,
+	    .targetInNonlethalDownState = lifeState == RE::ACTOR_LIFE_STATE::kEssentialDown ||
+	                                  lifeState == RE::ACTOR_LIFE_STATE::kBleedout ||
+	                                  lifeState == RE::ACTOR_LIFE_STATE::kUnconcious,
+	    .healthAfter = healthAfter,
+	});
 	const auto names = CollectNodeNames(impact, g_config.fallbackHeadAncestorDepth);
 	const auto region = ClassifyHitRegion(static_cast<std::int32_t>(a_hitData.damageLimb.underlying()), names,
 	                                      g_config.fallbackHeadNodeTokens);
 
-	const auto healthAfter =
-	    static_cast<double>(a_target.AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth));
 	const auto maximumHealth = static_cast<double>(a_target.GetActorValueMax(RE::ActorValue::kHealth));
 	const auto healthRatioAfter = maximumHealth > 0.0 && std::isfinite(maximumHealth)
 	                                  ? std::clamp(healthAfter / maximumHealth, 0.0, 1.0)
@@ -110,6 +147,7 @@ void ApplyPostDamageDecision(RE::Character &a_target, RE::HitData &a_hitData, co
 	const ImpactContext context{.enabled = g_config.enabled,
 	                            .targetWasAlive = a_targetWasAlive,
 	                            .targetKilledByHit = killedByHit,
+	                            .targetIsLivingHumanoid = a_targetIsLivingHumanoid,
 	                            .vanillaWouldEmbed = vanillaWouldEmbed,
 	                            .blockedOrAlreadyRicocheting = blockedOrRicocheting,
 	                            .targetIsPlayer = a_target.IsPlayerRef(),
@@ -125,10 +163,10 @@ void ApplyPostDamageDecision(RE::Character &a_target, RE::HitData &a_hitData, co
 	}
 
 	if (g_config.debugLogging) {
-		logger::debug("arrow {:08X} target {:08X}: region={} healthAfter={:.4f} killedByHit={} "
-		              "vanillaEmbed={} action={}",
-		              a_projectile.GetFormID(), a_target.GetFormID(), ToString(region), healthRatioAfter,
-		              killedByHit, vanillaWouldEmbed, ToString(action));
+		logger::debug("arrow {:08X} target {:08X}: livingHumanoid={} region={} healthAfter={:.4f} "
+		              "killedByHit={} vanillaEmbed={} action={}",
+		              a_projectile.GetFormID(), a_target.GetFormID(), a_targetIsLivingHumanoid,
+		              ToString(region), healthRatioAfter, killedByHit, vanillaWouldEmbed, ToString(action));
 	}
 }
 
@@ -139,11 +177,15 @@ struct ProjectileActorHitHook {
 		    a_target->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth) > 0.0F;
 		auto source = a_hitData ? a_hitData->sourceRef.get() : RE::NiPointer<RE::TESObjectREFR>{};
 		auto *projectile = source ? source->As<RE::Projectile>() : nullptr;
+		const bool targetIsLivingHumanoid = a_target && projectile &&
+		                                    projectile->GetFormType() == RE::FormType::ProjectileArrow &&
+		                                    IsLivingHumanoidTarget(CollectTargetTypeTraits(*a_target));
 
 		void *result = Func(a_target, a_hitData);
 		try {
 			if (a_target && a_hitData && projectile) {
-				ApplyPostDamageDecision(*a_target, *a_hitData, targetWasAlive, *projectile);
+				ApplyPostDamageDecision(*a_target, *a_hitData, targetWasAlive, targetIsLivingHumanoid,
+				                        *projectile);
 			}
 		} catch (const std::exception &error) {
 			logger::error("post-damage arrow decision failed safely: {}", error.what());
