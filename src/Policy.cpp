@@ -39,9 +39,34 @@ inline constexpr std::int32_t LimbSaddle = 5;
 }
 } // namespace
 
+bool IsLivingHumanoidTarget(const TargetTypeTraits &a_traits) noexcept {
+	const bool hasExcludedType = a_traits.actorTypeAnimal || a_traits.actorTypeCreature ||
+	                             a_traits.actorTypeDaedra || a_traits.actorTypeDragon ||
+	                             a_traits.actorTypeDwarven || a_traits.actorTypeGhost ||
+	                             a_traits.actorTypeUndead || a_traits.ghost || a_traits.reanimated ||
+	                             a_traits.excludedVanillaUtilityRace;
+	return a_traits.hasRace && a_traits.actorTypeNPC && !hasExcludedType;
+}
+
+bool WasKilledByHit(const PostDamageState &a_state) noexcept {
+	if (!a_state.targetWasAlive) {
+		return false;
+	}
+	if (a_state.targetLifeStateDyingOrDead) {
+		return true;
+	}
+	if (a_state.targetInNonlethalDownState) {
+		return false;
+	}
+	if (a_state.hitMarkedFatal || a_state.targetReportsDead) {
+		return true;
+	}
+	return std::isfinite(a_state.healthAfter) && a_state.healthAfter <= 0.0;
+}
+
 ImpactAction DecideImpact(const ImpactContext &a_context) noexcept {
 	if (!a_context.enabled || !a_context.vanillaWouldEmbed || a_context.blockedOrAlreadyRicocheting ||
-	    !a_context.targetWasAlive) {
+	    !a_context.targetWasAlive || !a_context.targetIsLivingHumanoid) {
 		return ImpactAction::PreserveVanilla;
 	}
 	if ((a_context.targetIsPlayer && !a_context.affectPlayer) ||

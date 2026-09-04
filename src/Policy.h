@@ -10,10 +10,35 @@ enum class HitRegion : std::uint8_t { Unknown, Head, Body };
 
 enum class ImpactAction : std::uint8_t { PreserveVanilla, Bounce };
 
+struct TargetTypeTraits {
+	bool hasRace{false};
+	bool actorTypeNPC{false};
+	bool actorTypeAnimal{false};
+	bool actorTypeCreature{false};
+	bool actorTypeDaedra{false};
+	bool actorTypeDragon{false};
+	bool actorTypeDwarven{false};
+	bool actorTypeGhost{false};
+	bool actorTypeUndead{false};
+	bool ghost{false};
+	bool reanimated{false};
+	bool excludedVanillaUtilityRace{false};
+};
+
+struct PostDamageState {
+	bool targetWasAlive{true};
+	bool hitMarkedFatal{false};
+	bool targetReportsDead{false};
+	bool targetLifeStateDyingOrDead{false};
+	bool targetInNonlethalDownState{false};
+	double healthAfter{1.0};
+};
+
 struct ImpactContext {
 	bool enabled{true};
 	bool targetWasAlive{true};
 	bool targetKilledByHit{false};
+	bool targetIsLivingHumanoid{true};
 	bool vanillaWouldEmbed{true};
 	bool blockedOrAlreadyRicocheting{false};
 	bool targetIsPlayer{false};
@@ -24,6 +49,8 @@ struct ImpactContext {
 	double bodyStickBelowHealthRatio{0.5};
 };
 
+[[nodiscard]] bool IsLivingHumanoidTarget(const TargetTypeTraits &a_traits) noexcept;
+[[nodiscard]] bool WasKilledByHit(const PostDamageState &a_state) noexcept;
 [[nodiscard]] ImpactAction DecideImpact(const ImpactContext &a_context) noexcept;
 [[nodiscard]] HitRegion ClassifyHitRegion(std::int32_t a_engineLimb,
                                           std::span<const std::string> a_nodeAndAncestorNames,

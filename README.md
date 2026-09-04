@@ -8,6 +8,10 @@ projectile damage.
 
 ## Rules
 
+- Conditional bounce decisions apply only to living humanoid NPC races. The
+  actor must resolve through Skyrim's standard `ActorTypeNPC` keyword; animals, creatures, Daedra,
+  dragons, Dwarven constructs, familiars, ghosts, giants, horses, trolls,
+  undead, and reanimated actors preserve vanilla behavior.
 - A nonlethal head or eye hit bounces instead of remaining embedded.
 - A lethal head or eye hit preserves Skyrim's normal impact result, so it may
   remain embedded.
@@ -16,7 +20,8 @@ projectile damage.
 - A body hit may remain embedded once the target is below 50% health.
 - A lethal body hit preserves Skyrim's normal impact result.
 - Blocked hits, existing ricochets, non-ballistic projectiles, already-dead targets,
-  and impacts whose location cannot be classified preserve vanilla behavior.
+  unsupported target types, and impacts whose location cannot be classified
+  preserve vanilla behavior.
 
 The plugin never forces an arrow to stick. It only changes an engine-selected
 `Stick` or `Impale` result to `Bounce` when one of the rules above requires it.
@@ -41,10 +46,20 @@ Logs are written to the normal SKSE log directory as
 `ConditionalArrowEmbedding.log`. The plugin has no modal error dialogs, audio,
 focus changes, external processes, ESP/ESL, scripts, MCM, or save data.
 
+Mod-added humanoids are supported when either the race or actor base follows
+Skyrim's standard `ActorTypeNPC` tagging. Untagged or ambiguously tagged races fail open and keep
+vanilla embedding rather than being guessed from skeleton or appearance. The
+two nonliving vanilla utility races tagged as NPCs (`InvisibleRace` and
+`ManakinRace`) are explicitly excluded.
+
+The vanilla record evidence and classification rationale are documented in
+[`docs/VANILLA-TARGET-AUDIT.md`](docs/VANILLA-TARGET-AUDIT.md).
+
 ## Compatibility
 
 The hook runs after Skyrim applies the prepared `HitData` to a character. It
-does not estimate damage, modify health, or replace the hit. Mods that also
+uses the resulting health and life state only to recognize a killing blow; it
+does not modify health, damage, or replace the hit. Mods that also
 patch the same call in `MissileProjectile::ProcessImpacts` may conflict at the
 native-code level. Mods that merely change arrow meshes, textures, ammunition,
 damage, bows, perks, or actor health should generally be compatible.
