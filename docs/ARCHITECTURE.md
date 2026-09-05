@@ -61,7 +61,14 @@ from the projectile impact and a bounded ancestor walk are a fallback. Unknown
 locations preserve vanilla behavior.
 
 When the policy selects bounce, both the missile-level result and the matched
-impact result are changed from an embedding result to `Bounce`. No damage fields,
+impact result are changed from an embedding result to `Bounce`. The match is
+limited to the unprocessed impact at the list head: `AddImpact` installs the
+current collision there, and `HandleHits` marks it processed only after the
+post-damage hook returns. Historical impacts are never searched or used as a
+fallback, and already-processed or destroyed projectiles fail open. Policy
+eligibility is based on the missile-wide result because that is the value
+`ProcessImpacts` actually dispatches; the per-impact value is synchronized only
+when applying a bounce. No damage fields,
 actor values, projectile positions, inventory, forms, or save data are changed.
 
 Default runtime telemetry is bounded to five first-occurrence messages per game

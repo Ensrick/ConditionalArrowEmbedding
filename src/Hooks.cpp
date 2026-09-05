@@ -70,32 +70,30 @@ std::atomic_uint32_t g_loggedTelemetry{};
 	};
 }
 
-[[nodiscard]] float DistanceSquared(const RE::NiPoint3 &a_left, const RE::NiPoint3 &a_right) noexcept {
-	const auto x = a_left.x - a_right.x;
-	const auto y = a_left.y - a_right.y;
-	const auto z = a_left.z - a_right.z;
-	return x * x + y * y + z * z;
-}
-
-[[nodiscard]] RE::Projectile::ImpactData *FindImpact(RE::Projectile &a_projectile, const RE::Actor &a_target,
-                                                     const RE::NiPoint3 &a_hitPosition) noexcept {
-	RE::Projectile::ImpactData *targetFallback = nullptr;
-	for (auto *impact : a_projectile.GetProjectileRuntimeData().impacts) {
-		if (!impact) {
-			continue;
-		}
-		auto collidee = impact->collidee.get();
-		if (!collidee || collidee.get() != std::addressof(a_target)) {
-			continue;
-		}
-		if (!targetFallback) {
-			targetFallback = impact;
-		}
-		if (DistanceSquared(impact->desiredTargetLoc, a_hitPosition) <= 0.01F) {
-			return impact;
-		}
+[[nodiscard]] RE::Projectile::ImpactData *FindCurrentImpact(RE::Projectile &a_projectile,
+                                                            const RE::Actor &a_target) noexcept {
+	// AddImpact installs the collision currently being handled at the list head.
+	// HandleHits marks that record processed (unk48 = 1) only after actor damage
+	// returns. Never scan older entries: a prior collision with the same actor can
+	// otherwise be mistaken for this hit and corrupt bounce processing.
+	auto &projectileData = a_projectile.GetProjectileRuntimeData();
+	if (projectileData.flags.any(RE::Projectile::Flags::kProcessedImpacts) ||
+	    projectileData.flags.any(RE::Projectile::Flags::kDestroyed)) {
+		return nullptr;
 	}
-	return targetFallback;
+	auto &impacts = projectileData.impacts;
+	if (impacts.empty()) {
+		return nullptr;
+	}
+	auto *impact = impacts.front();
+	if (!impact || impact->unk48 != 0) {
+		return nullptr;
+	}
+	auto collidee = impact->collidee.get();
+	if (!collidee || collidee.get() != std::addressof(a_target)) {
+		return nullptr;
+	}
+	return impact;
 }
 
 [[nodiscard]] std::vector<std::string> CollectNodeNames(const RE::Projectile::ImpactData *a_impact,
@@ -125,7 +123,7 @@ void ApplyPostDamageDecision(RE::Actor &a_target, RE::HitData &a_hitData, const 
 		return;
 	}
 
-	auto *impact = FindImpact(a_projectile, a_target, a_hitData.hitPosition);
+	auto *impact = FindCurrentImpact(a_projectile, a_target);
 	if (!impact) {
 		if (ClaimTelemetry(TelemetryEvent::MissingImpact)) {
 			logger::warn("runtime telemetry: normal arrow reached the physical-hit hook, but no matching "
@@ -141,8 +139,10 @@ void ApplyPostDamageDecision(RE::Actor &a_target, RE::HitData &a_hitData, const 
 	auto &missileData = missile->GetMissileRuntimeData();
 	const auto missileResultBefore = missileData.impactResult;
 	const auto impactResultBefore = impact->impactResult;
-	const bool vanillaWouldEmbed =
-	    IsEmbedResult(missileResultBefore) || IsEmbedResult(impactResultBefore);
+	// ProcessImpacts dispatches on the missile-wide result. The per-impact value
+	// is synchronized only when applying our bounce; it must not turn a
+	// missile-wide Destroy/Bounce result into a different action.
+	const bool vanillaWouldEmbed = IsEmbedResult(missileResultBefore);
 	const bool blockedOrRicocheting =
 	    a_hitData.flags.any(RE::HitData::Flag::kBlocked) || a_hitData.flags.any(RE::HitData::Flag::kRicochet);
 	const auto healthAfter =
@@ -211,15 +211,16 @@ struct ProjectileActorHitHook {
 		const bool targetWasAlive =
 		    a_target && !a_target->IsDead() &&
 		    a_target->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth) > 0.0F;
+		// Keep the smart pointer alive across the original hit processor; damage
+		// callbacks are allowed to release references.
 		auto source = a_hitData.sourceRef.get();
-		auto *projectile = source ? source->As<RE::Projectile>() : nullptr;
+		auto *projectile = source ? source->As<RE::ArrowProjectile>() : nullptr;
 		const bool targetIsLivingHumanoid = a_target && projectile &&
-		                                    projectile->GetFormType() == RE::FormType::ProjectileArrow &&
 		                                    IsLivingHumanoidTarget(CollectTargetTypeTraits(*a_target));
 
 		Func(a_target, a_hitData);
 		try {
-			if (a_target && projectile && projectile->GetFormType() == RE::FormType::ProjectileArrow) {
+			if (a_target && projectile) {
 				if (ClaimTelemetry(TelemetryEvent::NormalArrowReached)) {
 					logger::info("runtime telemetry: first normal arrow reached the post-damage physical-hit "
 					             "hook");

@@ -2,6 +2,19 @@
 
 All notable changes follow Keep a Changelog. Versions use Semantic Versioning.
 
+## [0.3.1] - 2026-09-05
+
+### Fixed
+
+- Restrict collision mutation to the newly-created, unprocessed impact at the
+  projectile impact-list head and require that it belongs to the struck actor.
+  Older impact records are never scanned or used as a fallback.
+- Use only the missile-wide result consumed by `ProcessImpacts` when deciding
+  whether vanilla would embed, and reject already-processed or destroyed
+  projectiles.
+- Retain the projectile smart pointer across damage callbacks and require an
+  exact `ArrowProjectile` cast.
+
 ## [0.3.0] - 2026-09-05
 
 ### Fixed

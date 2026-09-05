@@ -309,6 +309,22 @@ if (-not $RuntimeOnly) {
     if ($hasDeprecatedId -and $hasDeprecatedOffset) {
         throw "Hooks.cpp still selects deprecated source-null callsite Address Library ID 44204 + 0x3AA"
     }
+    if ($hookCode -notmatch '\bimpacts\s*\.\s*front\s*\(\s*\)' -or
+        $hookCode -notmatch '\bimpact\s*->\s*unk48\s*!=\s*0\b') {
+        throw "Hooks.cpp does not restrict mutation to the current unprocessed impact-list head"
+    }
+    if ($hookCode -match 'for\s*\([^\)]*:\s*[^\)]*\.impacts\s*\)') {
+        throw "Hooks.cpp scans historical projectile impacts instead of using only the current head"
+    }
+    if ($hookCode -notmatch 'source\s*\?\s*source\s*->\s*As\s*<\s*RE::ArrowProjectile\s*>') {
+        throw "Hooks.cpp does not retain and exact-cast the HitData projectile source"
+    }
+    if ($hookCode -match 'IsEmbedResult\s*\(\s*impactResultBefore\s*\)') {
+        throw "Hooks.cpp incorrectly uses the per-impact result as the ProcessImpacts policy source"
+    }
+    if ($hookCode -notmatch 'kProcessedImpacts' -or $hookCode -notmatch 'kDestroyed') {
+        throw "Hooks.cpp does not reject already-processed and destroyed projectiles"
+    }
     $sourceContractVerified = $true
 }
 
