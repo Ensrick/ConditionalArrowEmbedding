@@ -68,24 +68,10 @@ int main() {
 	}
 	{
 		Expect(WasKilledByHit(PostDamageState{
-		           .targetWasAlive = false, .hitMarkedFatal = true, .healthAfter = 0.0}) == false,
+		           .targetWasAlive = false, .targetReportsDead = true}) == false,
 		       "pre-existing death is not attributed to hit");
-		Expect(WasKilledByHit(PostDamageState{.hitMarkedFatal = true}), "fatal HitData signal");
 		Expect(WasKilledByHit(PostDamageState{.targetReportsDead = true}), "engine dead signal");
-		Expect(WasKilledByHit(PostDamageState{.targetLifeStateDyingOrDead = true}),
-		       "dying life-state signal");
-		Expect(WasKilledByHit(PostDamageState{.healthAfter = 0.0}), "zero-health lethal fallback");
-		Expect(WasKilledByHit(PostDamageState{.healthAfter = -10.0}), "negative-health lethal fallback");
-		Expect(!WasKilledByHit(PostDamageState{.targetInNonlethalDownState = true, .healthAfter = 0.0}),
-		       "essential bleedout is not lethal");
-		Expect(!WasKilledByHit(PostDamageState{.hitMarkedFatal = true,
-		                                       .targetReportsDead = true,
-		                                       .targetInNonlethalDownState = true,
-		                                       .healthAfter = 0.0}),
-		       "explicit nonlethal down state overrides ambiguous fatal signals");
-		Expect(!WasKilledByHit(PostDamageState{.healthAfter = 0.01}), "positive health is nonlethal");
-		Expect(!WasKilledByHit(PostDamageState{.healthAfter = std::numeric_limits<double>::quiet_NaN()}),
-		       "unknown health fails open");
+		Expect(!WasKilledByHit(PostDamageState{}), "surviving target is nonlethal");
 	}
 	{
 		auto context = BodyAt(1.0);

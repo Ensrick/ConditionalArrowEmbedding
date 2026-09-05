@@ -57,15 +57,22 @@ The vanilla record evidence and classification rationale are documented in
 
 ## Compatibility
 
-The hook runs after Skyrim applies the prepared `HitData` to a character. It
-uses the resulting health and life state only to recognize a killing blow; it
-does not modify health, damage, or replace the hit. Mods that also
-patch the same call in `MissileProjectile::ProcessImpacts` may conflict at the
-native-code level. Mods that merely change arrow meshes, textures, ammunition,
-damage, bows, perks, or actor health should generally be compatible.
+The hook runs after Skyrim applies the prepared `HitData` to an actor on the
+normal owner-resolved arrow collision path. It uses the engine's resulting dead
+state to recognize a killing blow and remaining health for the body threshold;
+it does not modify health, damage, or replace the hit. Mods that also patch the physical-hit dispatcher may share
+the direct-call trampoline chain, but their load ordering still requires
+in-game compatibility testing. Mods that merely change arrow meshes, textures,
+ammunition, damage, bows, perks, or actor health should generally be compatible.
 
-This first release is built only for 1.7.104.0 because the exact callsite and
+This release is built only for 1.7.104.0 because the exact callsite and
 surrounding instruction bytes were verified against that executable.
+
+With normal logging, the DLL emits only first-occurrence runtime evidence: the
+first arrow routed through the hook, first complete policy decision, first
+conditional bounce, first missing-impact condition, and first handler failure.
+This is bounded to at most five messages per game session. Enable debug logging
+only when a per-hit trace is needed.
 
 ## Build and test
 
@@ -73,6 +80,11 @@ Initialize submodules, set `VCPKG_ROOT`, then run `tools/build.bat` from a Visua
 Studio 2022 C++ environment. The build runs deterministic policy tests and a
 binary audit. `tools/package.ps1` creates an installable archive and SHA-256
 manifest.
+
+`tools/verify-runtime-hook.ps1` additionally checks the installed 1.7.104.0
+executable and Address Library. It proves the normal owner-resolved arrow route,
+rejects the source-null regression site, verifies the post-damage mutation
+window, and checks that `ProcessImpacts` later consumes the impact result.
 
 Policy tests prove the requested decision matrix independently of Skyrim. A
 successful loader smoke test proves SKSE initialization and hook installation;

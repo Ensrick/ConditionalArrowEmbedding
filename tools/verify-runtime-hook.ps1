@@ -192,6 +192,23 @@ if ($processImpactsRva -eq $arrowHandleHitsRva) {
     throw "ArrowProjectile ProcessImpacts and HandleHits unexpectedly resolve to the same function"
 }
 
+# Prove that the value mutated after damage is consumed by the later visual
+# impact phase. ArrowProjectile::ProcessImpacts compares the AE missile runtime
+# result at +0x1E0 with Stick (4), conditionally runs its embed path, and then
+# tail-jumps to MissileProjectile::ProcessImpacts, which switches on the same
+# field for Bounce/Impale/Stick handling.
+$arrowStickReadRva = [uint32]($processImpactsRva + 0x31)
+Assert-BytesAtRva $exeBytes $layout $arrowStickReadRva `
+    ([byte[]](0x83, 0xBB, 0xE0, 0x01, 0x00, 0x00, 0x04, 0x75, 0x1C)) `
+    "ArrowProjectile ProcessImpacts stick-result consumer"
+$missileProcessImpactsRva = Resolve-Rel32TargetRva $exeBytes $layout `
+    ([uint32]($processImpactsRva + 0x71)) ([byte[]](0xE9)) 5 `
+    "ArrowProjectile ProcessImpacts tail call"
+Assert-BytesAtRva $exeBytes $layout ([uint32]($missileProcessImpactsRva + 0xB1)) `
+    ([byte[]](0x8B, 0x8B, 0xE0, 0x01, 0x00, 0x00,
+              0x83, 0xE9, 0x01, 0x74, 0x63)) `
+    "MissileProjectile ProcessImpacts result switch"
+
 # Prove why the legacy site misses ordinary arrows. HandleHits reads the
 # projectile shooter handle, resolves it, tests the resolved Character in r14,
 # and jumps to the +0x388 fallback only when that source is null. The ordinary
@@ -340,6 +357,13 @@ try {
     collisionPhaseBoundary = [ordered]@{
         addImpactVtableIndex = '0xBD'
         observedCallsiteRva = ('0x{0:X}' -f $addImpactCallRva)
+    }
+    impactResultConsumer = [ordered]@{
+        arrowProcessImpactsRva = ('0x{0:X}' -f $processImpactsRva)
+        arrowStickReadRva = ('0x{0:X}' -f $arrowStickReadRva)
+        missileProcessImpactsRva = ('0x{0:X}' -f $missileProcessImpactsRva)
+        fieldOffset = '0x1E0'
+        verified = $true
     }
     verified = $true
 } | ConvertTo-Json -Depth 6

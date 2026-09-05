@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ConditionalArrowEmbedding VERSION 0.2.0 LANGUAGES CXX)
+project(ConditionalArrowEmbedding VERSION 0.3.0 LANGUAGES CXX)
 
 if(MSVC)
     add_compile_options("/experimental:deterministic" "/pathmap:${CMAKE_SOURCE_DIR}=.")

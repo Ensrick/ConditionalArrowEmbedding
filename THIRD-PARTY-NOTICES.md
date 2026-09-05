@@ -24,6 +24,19 @@ Repository: https://github.com/tossaponk/ArcheryLocationalDamage
 
 Reviewed commit: `1ae6e4e6` (2.1.6)
 
+## Core Impact Framework and Ricochet Framework
+
+Seb263's GPL-3.0-licensed Core Impact Framework and Ricochet Framework sources
+were inspected as behavioral prior art for the public projectile collision
+entry points. This project's implementation and executable verifier were
+written independently; no GPL source is copied or linked.
+
+Repositories: https://github.com/Seb263/SkyrimSE_CoreImpactFramework and
+https://github.com/Seb263/SkyrimSE_RicochetFramework
+
+Reviewed commits: `fc502165db8c4870b52c452596ae82664d949768` and
+`2979bb6d7d66f76224dcf4f6f514782d16d613d8`.
+
 ## SKSE and Address Library
 
 SKSE and Address Library are runtime requirements and are not redistributed by
