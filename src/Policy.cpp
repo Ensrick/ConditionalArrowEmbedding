@@ -49,19 +49,7 @@ bool IsLivingHumanoidTarget(const TargetTypeTraits &a_traits) noexcept {
 }
 
 bool WasKilledByHit(const PostDamageState &a_state) noexcept {
-	if (!a_state.targetWasAlive) {
-		return false;
-	}
-	if (a_state.targetLifeStateDyingOrDead) {
-		return true;
-	}
-	if (a_state.targetInNonlethalDownState) {
-		return false;
-	}
-	if (a_state.hitMarkedFatal || a_state.targetReportsDead) {
-		return true;
-	}
-	return std::isfinite(a_state.healthAfter) && a_state.healthAfter <= 0.0;
+	return a_state.targetWasAlive && a_state.targetReportsDead;
 }
 
 ImpactAction DecideImpact(const ImpactContext &a_context) noexcept {

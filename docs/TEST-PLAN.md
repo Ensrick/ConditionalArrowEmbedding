@@ -2,6 +2,10 @@
 
 Use a disposable save and test with debug logging enabled.
 
+Before launching, run `tools/verify-runtime-hook.ps1`. It must report
+`sourceContractVerified=true`, `reachableFromOwnerResolvedArrowPath=true`, and
+`verified=true` for the exact local executable and Address Library.
+
 1. Shoot a healthy living humanoid in the head without killing it: damage applies and the
    arrow does not remain embedded.
 2. Kill a living humanoid from full health with one headshot: damage applies and
@@ -25,6 +29,10 @@ Use a disposable save and test with debug logging enabled.
 11. Repeat representative cases with crossbow bolts; confirm spells and other
    non-ballistic projectiles retain vanilla behavior.
 12. Inspect `ConditionalArrowEmbedding.log` and the crash logger after the matrix.
+    The first ordinary arrow must produce `first normal arrow reached`, the first
+    matched hit must produce `first matched arrow decision`, and an eligible
+    nonlethal test must produce `first conditional bounce applied`. With debug
+    logging disabled, none of those categories may repeat during the session.
 
 Repeat the threshold tests with a controlled target whose health values can be
 read before and after each shot. Do not call the build stable until the matrix is

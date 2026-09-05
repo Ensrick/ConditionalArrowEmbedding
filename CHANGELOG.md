@@ -2,6 +2,40 @@
 
 All notable changes follow Keep a Changelog. Versions use Semantic Versioning.
 
+## [0.3.1] - 2026-09-05
+
+### Fixed
+
+- Restrict collision mutation to the newly-created, unprocessed impact at the
+  projectile impact-list head and require that it belongs to the struck actor.
+  Older impact records are never scanned or used as a fallback.
+- Use only the missile-wide result consumed by `ProcessImpacts` when deciding
+  whether vanilla would embed, and reject already-processed or destroyed
+  projectiles.
+- Retain the projectile smart pointer across damage callbacks and require an
+  exact `ArrowProjectile` cast.
+
+## [0.3.0] - 2026-09-05
+
+### Fixed
+
+- Replace the unreachable source-null projectile fallback hook with the verified
+  normal owner-resolved arrow damage path at Address Library ID 38627 plus
+  `0x4A8`.
+- Correct the native hook ABI to `void (Actor*, HitData&)`.
+- Preserve post-damage killing-blow detection while changing only the impact
+  result consumed later by `ArrowProjectile::ProcessImpacts`.
+- Determine lethality from the engine's post-hit dead state instead of the
+  precomputed fatal flag or zero health, preserving protected and
+  death-prevention survivors.
+
+### Added
+
+- Add bounded first-occurrence runtime telemetry for arrow routing, policy
+  decisions, applied bounces, missing impacts, and handler failures.
+- Verify the complete 1.7.104.0 control-flow chain and reject reintroduction of
+  the dead fallback hook.
+
 ## [0.2.0] - 2026-09-03
 
 ### Changed

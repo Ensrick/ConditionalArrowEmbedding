@@ -1,6 +1,6 @@
 # Vanilla target classification audit
 
-This audit supports the living-humanoid eligibility rule in version 0.2.0. It
+This audit supports the living-humanoid eligibility rule in version 0.3.1. It
 examined the 99 `RACE` records in the exact Skyrim 1.7.104 data file used for
 development:
 

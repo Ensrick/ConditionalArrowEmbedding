@@ -27,11 +27,7 @@ struct TargetTypeTraits {
 
 struct PostDamageState {
 	bool targetWasAlive{true};
-	bool hitMarkedFatal{false};
 	bool targetReportsDead{false};
-	bool targetLifeStateDyingOrDead{false};
-	bool targetInNonlethalDownState{false};
-	double healthAfter{1.0};
 };
 
 struct ImpactContext {
