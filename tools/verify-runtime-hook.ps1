@@ -192,7 +192,7 @@ if ($processImpactsRva -eq $arrowHandleHitsRva) {
     throw "ArrowProjectile ProcessImpacts and HandleHits unexpectedly resolve to the same function"
 }
 
-# Prove that the value mutated after damage is consumed by the later visual
+# Prove that the impact value is consumed by the separate visual
 # impact phase. ArrowProjectile::ProcessImpacts compares the AE missile runtime
 # result at +0x1E0 with Stick (4), conditionally runs its embed path, and then
 # tail-jumps to MissileProjectile::ProcessImpacts, which switches on the same
@@ -328,6 +328,8 @@ if (-not $RuntimeOnly) {
     $sourceContractVerified = $true
 }
 
+. (Join-Path $PSScriptRoot 'verify-queued-damage.ps1')
+
 $hashAlgorithm = [Security.Cryptography.SHA256]::Create()
 $stream = [IO.File]::OpenRead($SkyrimExe)
 try {
@@ -361,7 +363,7 @@ try {
         callsiteRva = ('0x{0:X}' -f $actorHitCallsiteRva)
         actorProcessHitRva = ('0x{0:X}' -f $actorProcessHitRva)
         reachableFromOwnerResolvedArrowPath = $true
-        mutationWindow = 'post-damage, before return to ArrowProjectile::HandleHits'
+        mutationWindow = 'synchronous completion only; queued submission never decides early'
     }
     rejectedRegression = [ordered]@{
         addressLibraryId = $arrowHandleHitsId
@@ -370,6 +372,7 @@ try {
         reason = 'source-null fallback; owner-resolved arrows branch around it'
         rejected = $true
     }
+    queuedDamageAndVisualGate = $queuedDamageProof
     collisionPhaseBoundary = [ordered]@{
         addImpactVtableIndex = '0xBD'
         observedCallsiteRva = ('0x{0:X}' -f $addImpactCallRva)

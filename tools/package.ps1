@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "0.3.2",
+    [string]$Version = "0.3.3",
     [string]$StageRoot = "",
     [string]$OutputDirectory = "",
     [switch]$AllowDirty

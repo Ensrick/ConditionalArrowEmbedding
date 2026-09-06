@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ConditionalArrowEmbedding VERSION 0.3.2 LANGUAGES CXX)
+project(ConditionalArrowEmbedding VERSION 0.3.3 LANGUAGES CXX)
 
 if(MSVC)
     add_compile_options("/experimental:deterministic" "/pathmap:${CMAKE_SOURCE_DIR}=.")
@@ -36,6 +36,8 @@ add_commonlibsse_plugin(${PROJECT_NAME}
         src/Hooks.cpp
         src/Hooks.h
         src/ActorStateAccess.h
+        src/DamageDispatch.h
+        src/DeferredImpactGate.h
         src/PCH.h
         src/Plugin.cpp
         src/Version.h
@@ -52,6 +54,11 @@ target_link_libraries(ConditionalArrowEmbeddingTests PRIVATE ConditionalArrowEmb
 
 enable_testing()
 add_test(NAME PolicyTests COMMAND ConditionalArrowEmbeddingTests)
+add_executable(ConditionalArrowEmbeddingDamageDispatchTests tests/DamageDispatchTests.cpp)
+target_compile_features(ConditionalArrowEmbeddingDamageDispatchTests PRIVATE cxx_std_23)
+target_compile_options(ConditionalArrowEmbeddingDamageDispatchTests PRIVATE /W4 /WX)
+target_link_libraries(ConditionalArrowEmbeddingDamageDispatchTests PRIVATE ConditionalArrowEmbeddingCore)
+add_test(NAME DamageDispatchTests COMMAND ConditionalArrowEmbeddingDamageDispatchTests)
 
 add_executable(ConditionalArrowEmbeddingActorStateTests tests/ActorStateAccessTests.cpp)
 target_compile_features(ConditionalArrowEmbeddingActorStateTests PRIVATE cxx_std_23)

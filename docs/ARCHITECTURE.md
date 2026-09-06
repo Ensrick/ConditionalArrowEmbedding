@@ -1,11 +1,17 @@
 # Architecture
 
-The SKSE hook replaces the `Actor::ProcessHit` call made by Skyrim 1.7.104.0
-from the shared physical-hit dispatcher at Address Library ID 38627 plus
-`0x4A8`. The eight bytes before the call, the direct-call opcode, and the nine
-bytes after it must match the reviewed executable before the hook is installed.
-The relative call target is allowed to have been redirected by another SKSE
-plugin so normal trampoline chaining remains possible.
+The SKSE implementation has four coordinated hook sites for Skyrim 1.7.104.0:
+
+| Site | Purpose |
+| --- | --- |
+| ID 38627 + `0x4A8` | Ordinary physical hit: evaluate only after non-deferred damage |
+| ID 38586 + `0xA7` | Actual queue submission: mark the dispatch deferred before enqueue |
+| ID 36991 + `0xA3D` | Queued command 0x10: evaluate after actual damage processing |
+| Arrow vtable ID 209891, slot `0xAC` | Delay pending visuals; commit a completed decision |
+
+Reviewed instruction signatures, Address Library RVAs and original call/vtable
+targets must all match before any hook is written. Replaced targets are rejected
+instead of assuming another hook preserves the required timing contract.
 
 This site was selected from the complete normal-arrow control flow, not from a
 callee match alone:
@@ -14,10 +20,13 @@ callee match alone:
    the projectile `HandleHits` implementation.
 2. Its owner-resolved actor branch calls a projectile dispatcher, which calls
    Address Library ID 38627.
-3. ID 38627 builds the final `HitData` and calls `Actor::ProcessHit` at `+0x4A8`.
-4. Control returns through `ArrowProjectile::HandleHits`; later,
-   `ArrowProjectile::ProcessImpacts` reads the missile impact result and runs
-   the visual embedding path only for `Stick`.
+3. ID 38627 builds `HitData` and calls `Actor::ProcessHit` at `+0x4A8`.
+4. ProcessHit may apply damage now, or copy/enqueue command 0x10 and return
+   without damage. The latter runs through ID 36991 + `0xA3D` later.
+5. `HandleHits` sets the impact's handled byte after damage **submission**.
+6. `ArrowProjectile::ProcessImpacts` reads the missile result. Its wrapper waits
+   when a tracked hit has not completed damage or has not acquired the handled
+   marker yet, then passes the final result into the original visual consumer.
 
 The previous hook at ID 44204 plus `0x3AA` called the same damage routine, but
 only from the source-null fallback branch. Ordinary player and NPC arrows have
@@ -26,8 +35,9 @@ load successfully without ever changing their impacts.
 
 The hook records whether the actor was alive and retains the projectile
 reference already stored in `HitData`. It calls the original engine routine
-first. Only after Skyrim applies damage does it classify the hit, read actual
-remaining health, and run the pure decision policy. Melee hits traverse the
+first. A thread-local scope observes the exact enqueue branch, so returning
+from a producer is never mislabeled post-damage. Only a non-deferred damage
+completion reads actual remaining health and runs the pure policy. Melee hits traverse the
 shared dispatcher too, but are rejected immediately unless `sourceRef` resolves
 to an arrow-class projectile.
 
@@ -55,8 +65,8 @@ Actor+0xC0 and its life-state word is Actor+0xC8. The synthetic native regressio
 varies both words independently and verifies the actual helper and decision.
 
 Killing-blow detection deliberately precedes head/body threshold logic. The
-hook records that the actor was alive, calls the synchronous engine damage
-routine, then trusts the post-hit `Actor::IsDead()` result. It intentionally
+hook records that the actor was alive, calls the engine damage routine, and
+only after a non-deferred completion trusts `Actor::IsDead()`. It intentionally
 does not infer death from the precomputed `HitData::kFatal` bit or raw zero
 health: protected actors and death-prevention mechanics can survive either
 signal. Skyrim 1.7.104 reports dying/dead actors through `IsDead()` while
@@ -67,19 +77,37 @@ from the projectile impact and a bounded ancestor walk are a fallback. Unknown
 locations below 50% health preserve vanilla behavior; at 50% or more both
 possible region rules require bounce, so no location evidence is needed.
 
-When the policy selects bounce, both the missile-level result and the matched
-impact result are changed from an embedding result to `Bounce`. The match is
-limited to the unprocessed impact at the list head: `AddImpact` installs the
-current collision there, and `HandleHits` marks it processed only after the
-post-damage hook returns. Historical impacts are never searched or used as a
-fallback, and already-processed or destroyed projectiles fail open. Policy
+When policy selects bounce, both missile and matched impact results change to
+`Bounce`: immediately for synchronous damage, or at the guarded visual consumer
+for queued damage. Matching is limited to the current impact-list head. The
+handled byte distinguishes damage submission from projectile-wide completed
+visual processing; queued completion accepts handled 0/1, while the visual
+gate requires 1 before resuming. Native `Projectile::ProcessImpacts` checks that
+byte before either actor-damage path, preventing a resumed visual callback from
+applying the hit twice. The mod never writes or clears it.
+
+The queued identity stamp retains only generation-bearing projectile and actor
+handles, compared pointer values, collision vectors, node identity and both
+original results. Cached pointers are never dereferenced. Both completion and
+consumption must match the live stamp, including the exact list head.
+Historical impacts are never searched or used as a fallback, and
+already-processed or destroyed projectiles fail open. Policy
 eligibility is based on the missile-wide result because that is the value
 `ProcessImpacts` actually dispatches; the per-impact value is synchronized only
 when applying a bounce. No damage fields,
 actor values, projectile positions, inventory, forms, or save data are changed.
 
-Default runtime telemetry is bounded to six first-occurrence messages per game
-session. It records the first normal-arrow route, first matched policy decision,
-first applied bounce, first missing-impact failure, first handler exception,
-and player-specific eligibility including race and every classification gate.
-Per-hit detail remains opt-in through `debugLogging`.
+Pending state is mutex-protected, fixed at 256 records and expires after two
+seconds of steady-clock time. Duplicate ambiguous submissions are rejected;
+an actual consumer requeue keeps its original deadline. The map holds no engine
+object references and serializes nothing. Canceled, stale, capacity-limited or
+expired hits preserve vanilla. Destroy-after-hit/chain-shatter paths never wait,
+because a special native caller destroys them regardless of the visual return.
+Explicit save-load invalidation is not implemented; current handle/stamp guards
+and expiry are not a claim of tested cross-load lifecycle behavior.
+
+Default runtime telemetry is bounded to twelve first-occurrence messages per
+session, including classification, damage submission/completion and visual
+gating. Detailed per-hit logging is opt-in. Host tests and the exact executable
+audit establish source/ABI/control-flow properties, not actual gameplay
+acceptance. See `QUEUED-DAMAGE-REGRESSION.md` for the failure evidence and limits.

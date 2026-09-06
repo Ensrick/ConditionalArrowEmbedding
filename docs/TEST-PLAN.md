@@ -34,8 +34,21 @@ Before launching, run `tools/verify-runtime-hook.ps1`. It must report
 12. Inspect `ConditionalArrowEmbedding.log` and the crash logger after the matrix.
     The first ordinary arrow must produce `first normal arrow reached`, the first
     matched hit must produce `first matched arrow decision`, and an eligible
-    nonlethal test must produce `first conditional bounce applied`. With debug
+    nonlethal test must produce `first conditional bounce applied` for synchronous
+    damage or `queued post-damage bounce committed at visual consumer` for queued
+    damage. A queued submission must not produce a decision until actual damage
+    completes. A lethal queued test must report `killing arrow preserved` and
+    `action=preserve-vanilla` (not a pre-hit full-health bounce). With debug
     logging disabled, none of those categories may repeat during the session.
+13. Repeat above-half-health one-shot and multi-shot kills in both head and body.
+    Compare per-hit health loss with the DLL disabled: no duplicate damage or
+    altered damage is allowed. Include a nonlethal body shot crossing from
+    above 50% to below 50%; it must use the lower actual post-hit health.
+14. Confirm no projectile lingers after queued damage. A rare visual deferral is
+    allowed until damage finishes; canceled/ambiguous paths preserve vanilla.
+    Special explosive/destroy-after-hit and chain-shatter arrows remain vanilla.
+15. Reload the disposable save and repeat a short matrix; explicit cross-save
+    lifecycle acceptance remains unverified until this is tested.
 
 Run `ActorStateAccessTests` before packaging. Its 144 synthetic memory layouts
 must show that actual reanimation state controls eligibility independently of

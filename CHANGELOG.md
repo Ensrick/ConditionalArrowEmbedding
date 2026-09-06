@@ -2,6 +2,33 @@
 
 All notable changes follow Keep a Changelog. Versions use Semantic Versioning.
 
+## [0.3.3] - 2026-09-05
+
+### Fixed
+
+- Stop evaluating queued hits against pre-damage health. Skyrim 1.7.104's
+  `Actor::ProcessHit` can copy/enqueue `HitData` and return without applying it;
+  0.3.2 incorrectly treated that return as post-damage, causing killing shots
+  from above 50% health to bounce.
+- Hook the actual queued damage consumer and gate pending visual consumption
+  until damage completes and Skyrim marks the impact's damage submitted.
+  Native handled-bit checks prevent the resumed visual path replaying damage.
+- Revalidate current impact identity before mutation; cap deferred state and
+  fail open on timeout, ambiguity, destroyed/explosive paths, or changed impact.
+- Keep native damage submission unconditional even if pre-hit bookkeeping
+  throws; suppress diagnostic failures at native hook boundaries.
+
+### Added
+
+- Deterministic native callback-ordering tests and exact-runtime control-flow
+  audits for queue command 0x10, its copied HitData, visual deferral and native
+  damage-replay guards. Additional bounded runtime timing diagnostics.
+
+This is a test candidate. Host tests and binary inspection pass; a fresh
+in-game lethal/nonlethal visual-and-damage matrix remains required. Earlier
+documentation describing ProcessHit as unconditionally synchronous was wrong
+and is superseded by the queue-aware architecture below.
+
 ## [0.3.2] - 2026-09-05
 
 ### Fixed
