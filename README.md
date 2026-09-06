@@ -58,7 +58,7 @@ The vanilla record evidence and classification rationale are documented in
 
 ## Compatibility
 
-Version 0.3.3 distinguishes synchronous damage from Skyrim's copied-HitData
+Version 0.3.4 distinguishes synchronous damage from Skyrim's copied-HitData
 queue. It never decides from the pre-hit health returned by a queue submission.
 Queued hits are evaluated after the actual damage callback, and a bounded gate
 at the visual consumer prevents premature embedding/bounce while damage is
@@ -71,12 +71,15 @@ compatibility with other hooks at these same sites requires a deliberate audit.
 Mods that merely change arrow meshes, textures,
 ammunition, damage, bows, perks, or actor health should generally be compatible.
 
-Destroyed, already-processed, destroy-after-hit/explosive-path, chain-shatter,
+Destroyed, already-processed, runtime-explosion, chain-shatter,
 stale or ambiguous impacts preserve vanilla. Queued tracking uses generation
 handles and current-impact identity values, not owning pointers or serialized
 state. It is capped at 256 entries and a two-second deadline; dropped/canceled
 damage or an unusual ordering fails open rather than hanging the projectile.
 No cross-save lifecycle guarantee or in-game acceptance is claimed yet.
+Ordinary non-hitscan arrows remain eligible even though the engine sets their
+`kDestroyAfterHit` flag; that flag alone does not select the special explosion
+lifecycle. This corrects 0.3.3's overly broad exclusion.
 
 This release is built only for 1.7.104.0 because the exact callsite and
 surrounding instruction bytes were verified against that executable.
@@ -86,7 +89,8 @@ first arrow routed through the hook, first complete policy decision, first
 conditional bounce, first missing-impact condition, first handler failure, and
 the player's race and eligibility gates. Queue submission/completion, preserved
 killing shots, visual deferral/commit, and rejected pending state are also
-recorded once. This is bounded to at most twelve messages per game session. Enable debug logging
+recorded once. Registration success/rejection also reports lifecycle flags and
+an explicit rejection reason. This is bounded to at most fourteen messages per game session. Enable debug logging
 only when a per-hit trace is needed.
 
 ## Build and test
@@ -104,7 +108,8 @@ guards that prevent damage replay. It does not assume queue/update ordering.
 
 Policy tests prove the requested decision matrix independently of Skyrim. Native
 layout tests additionally verify that the reanimation check reads the 1.7.104
-runtime actor-state field, not the incompatible C++ base-class offset. A
+runtime actor-state field, not the incompatible C++ base-class offset, and
+that ordinary non-hitscan arrows pass the actual projectile lifecycle helper. A
 successful loader smoke test proves SKSE initialization and hook installation;
 actual arrow placement still requires in-game verification before a stable
 release.

@@ -5,6 +5,7 @@
 #include "DeferredImpactGate.h"
 #include "Hooks.h"
 #include "Policy.h"
+#include "ProjectileLifecycle.h"
 
 #include <bit>
 #include <chrono>
@@ -50,6 +51,8 @@ enum class TelemetryEvent : std::uint32_t {
 	VisualDeferred = 1U << 9U,
 	VisualBounceApplied = 1U << 10U,
 	DeferredRejected = 1U << 11U,
+	QueuedImpactRegistered = 1U << 12U,
+	QueuedRegistrationRejected = 1U << 13U,
 };
 
 std::atomic_uint32_t g_loggedTelemetry{};
@@ -125,8 +128,15 @@ std::atomic_uint32_t g_loggedTelemetry{};
 	};
 }
 
-[[nodiscard]] RE::Projectile::ImpactData *
-FindCurrentImpact(RE::Projectile &a_projectile, const RE::Actor &a_target, const HitPhase a_phase) noexcept {
+[[nodiscard]] RE::Projectile::ImpactData *FindCurrentImpact(RE::Projectile &a_projectile,
+                                                            const RE::Actor &a_target, const HitPhase a_phase,
+                                                            const char **a_failure = nullptr) noexcept {
+	const auto reject = [a_failure](const char *a_reason) -> RE::Projectile::ImpactData * {
+		if (a_failure) {
+			*a_failure = a_reason;
+		}
+		return nullptr;
+	};
 	// AddImpact installs the collision currently being handled at the list head.
 	// HandleHits marks that record handled (unk48 = 1) after submitting damage.
 	// Queued damage may execute after that marker changes, but before the separate
@@ -135,39 +145,48 @@ FindCurrentImpact(RE::Projectile &a_projectile, const RE::Actor &a_target, const
 	auto &projectileData = a_projectile.GetProjectileRuntimeData();
 	if (projectileData.flags.any(RE::Projectile::Flags::kProcessedImpacts) ||
 	    projectileData.flags.any(RE::Projectile::Flags::kDestroyed)) {
-		return nullptr;
+		return reject("processed-or-destroyed");
 	}
 	auto &impacts = projectileData.impacts;
 	if (impacts.empty()) {
-		return nullptr;
+		return reject("empty-impact-list");
 	}
 	auto *impact = impacts.front();
 	if (!impact || impact->unk48 > 1 || (a_phase == HitPhase::Immediate && impact->unk48 != 0)) {
-		return nullptr;
+		return reject("missing-or-unexpected-handled-marker");
 	}
 	auto collidee = impact->collidee.get();
 	if (!collidee || collidee.get() != std::addressof(a_target)) {
-		return nullptr;
+		return reject("current-target-mismatch");
 	}
 	return impact;
 }
 
 [[nodiscard]] std::optional<ImpactStamp> CaptureImpactStamp(RE::Projectile &a_projectile,
-                                                            const RE::Actor &a_target, HitPhase a_phase) {
-	const auto &data = a_projectile.GetProjectileRuntimeData();
-	// The explosive/destroy-after-hit caller destroys the projectile even when
+                                                            const RE::Actor &a_target, HitPhase a_phase,
+                                                            const char **a_failure = nullptr) {
+	const auto reject = [a_failure](const char *a_reason) -> std::optional<ImpactStamp> {
+		if (a_failure) {
+			*a_failure = a_reason;
+		}
+		return std::nullopt;
+	};
+	// The special explosion caller destroys the projectile even when
 	// ProcessImpacts returns false; never delay that special engine path.
-	if (data.flags.any(RE::Projectile::Flags::kDestroyAfterHit, RE::Projectile::Flags::kChainShatter)) {
+	if (HasUnsupportedDeferredLifecycle(a_projectile)) {
+		return reject("explosion-or-chain-shatter");
+	}
+	auto *impact = FindCurrentImpact(a_projectile, a_target, a_phase, a_failure);
+	auto *missile = a_projectile.As<RE::MissileProjectile>();
+	if (!impact) {
 		return std::nullopt;
 	}
-	auto *impact = FindCurrentImpact(a_projectile, a_target, a_phase);
-	auto *missile = a_projectile.As<RE::MissileProjectile>();
-	if (!impact || !missile) {
-		return std::nullopt;
+	if (!missile) {
+		return reject("not-missile-projectile");
 	}
 	const auto handle = a_projectile.GetHandle().native_handle();
 	if (handle == 0) {
-		return std::nullopt;
+		return reject("missing-projectile-handle");
 	}
 	return ImpactStamp{.projectile = handle,
 	                   .target = impact->collidee.native_handle(),
@@ -198,7 +217,8 @@ void RegisterQueuedImpact(RE::Actor *a_target, RE::HitData *a_hitData) {
 	if (!projectile || !IsLivingHumanoidTarget(CollectTargetTypeTraits(*a_target))) {
 		return;
 	}
-	if (const auto stamp = CaptureImpactStamp(*projectile, *a_target, HitPhase::QueuedCompletion)) {
+	const char *failure = "none";
+	if (const auto stamp = CaptureImpactStamp(*projectile, *a_target, HitPhase::QueuedCompletion, &failure)) {
 		if (!IsEmbedResult(static_cast<RE::ImpactResult>(stamp->missileResult))) {
 			return;
 		}
@@ -208,6 +228,18 @@ void RegisterQueuedImpact(RE::Actor *a_target, RE::HitData *a_hitData) {
 		if (!accepted && ClaimTelemetry(TelemetryEvent::DeferredRejected)) {
 			logger::warn("runtime telemetry: ambiguous or capacity-limited queued arrow; preserving vanilla");
 		}
+		if (accepted && ClaimTelemetry(TelemetryEvent::QueuedImpactRegistered)) {
+			logger::info("runtime telemetry: queued impact registered target={:08X} projectileFlags=0x{:08X} "
+			             "hasExplosion={} missileResult={}",
+			             a_target->GetFormID(), projectile->GetProjectileRuntimeData().flags.underlying(),
+			             projectile->GetProjectileRuntimeData().explosion != nullptr, stamp->missileResult);
+		}
+	} else if (ClaimTelemetry(TelemetryEvent::QueuedRegistrationRejected)) {
+		logger::warn("runtime telemetry: queued impact registration rejected target={:08X} reason={} "
+		             "projectileFlags=0x{:08X} hasExplosion={}; vanilla preserved",
+		             a_target->GetFormID(), failure,
+		             projectile->GetProjectileRuntimeData().flags.underlying(),
+		             projectile->GetProjectileRuntimeData().explosion != nullptr);
 	}
 }
 
@@ -238,14 +270,19 @@ void ApplyPostDamageDecision(RE::Actor &a_target, RE::HitData &a_hitData, const 
 	if (!missile) {
 		return;
 	}
-	const auto liveStamp = CaptureImpactStamp(a_projectile, a_target, a_phase);
+	const char *failure = "none";
+	const auto liveStamp = CaptureImpactStamp(a_projectile, a_target, a_phase, &failure);
 	if (!a_before || !liveStamp || *a_before != *liveStamp) {
 		std::scoped_lock lock(g_deferredMutex);
 		g_deferredImpacts.Reject(a_projectile.GetHandle().native_handle());
 		if (ClaimTelemetry(TelemetryEvent::MissingImpact)) {
 			logger::warn("runtime telemetry: missing, changed, processed, or unsupported current impact; "
-			             "phase={} vanilla preserved",
-			             a_phase == HitPhase::QueuedCompletion ? "queued" : "immediate");
+			             "phase={} beforePresent={} afterPresent={} afterFailure={} "
+			             "projectileFlags=0x{:08X} hasExplosion={} vanilla preserved",
+			             a_phase == HitPhase::QueuedCompletion ? "queued" : "immediate", a_before.has_value(),
+			             liveStamp.has_value(), failure,
+			             a_projectile.GetProjectileRuntimeData().flags.underlying(),
+			             a_projectile.GetProjectileRuntimeData().explosion != nullptr);
 		}
 		return; // Callback replaced/removed/reused this impact: never mutate it.
 	}
@@ -565,7 +602,7 @@ bool Install(Config a_config) {
 	logger::info("queue-aware physical-hit hooks installed at ID {} + 0x{:X}, "
 	             "38586 + 0xA7 (queue submission), 36991 + 0xA3D (queued completion); body threshold={:.3f}; "
 	             "arrow visual-consumer gate installed at vtable 209891[0xAC]; "
-	             "default runtime telemetry is bounded to twelve first-occurrence messages",
+	             "default runtime telemetry is bounded to fourteen first-occurrence messages",
 	             PhysicalHitDispatcherAddressId, PhysicalHitCallOffset, g_config.bodyStickBelowHealthRatio);
 	return true;
 }

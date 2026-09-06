@@ -56,6 +56,26 @@ Assert-BytesAtRva $exeBytes $layout 0x8029DA `
     ([byte[]](0xFF,0x90,0x60,0x05,0x00,0x00,0x49,0x8B,0xCE,0xE8)) `
     'destroy-after-hit path ignores visual return, so must be excluded'
 
+# Regression 0.3.3: bit 15 is set for ordinary non-hitscan arrows too. Prove
+# its initialization through ArrowProjectile::Handle3DLoaded, then prove the
+# special ignored-return caller is inside a function requiring an explosion.
+$arrowInitVa = Read-UInt64 $exeBytes (Convert-RvaToFileOffset $layout ($arrowVtableRva + (0xC0 * 8)))
+if ($arrowInitVa - $layout.ImageBase -ne 0x7DE270) { throw 'Arrow Handle3DLoaded vtable target changed' }
+$missileInitRva = Resolve-Rel32TargetRva $exeBytes $layout 0x7DE287 ([byte[]](0xE8)) 5 'arrow missile initialization'
+if ($missileInitRva -ne 0x7F5090) { throw 'Arrow missile initialization target changed' }
+Assert-BytesAtRva $exeBytes $layout 0x7F50C1 `
+    ([byte[]](0x41,0x0F,0xB6,0x90,0x80,0x00,0x00,0x00,0x80,0xE2,0x01)) 'base hitscan flag read into dl'
+Assert-BytesAtRva $exeBytes $layout 0x7F5187 `
+    ([byte[]](0x8B,0xC1,0x0F,0xBA,0xE9,0x0F,0x0F,0xBA,0xF0,0x0F,0x84,0xD2,0x0F,0x45,0xC8,
+              0x8B,0xC1,0x0F,0xBA,0xE9,0x0D,0x0F,0xBA,0xF0,0x0D,0x84,0xD2,0x0F,0x44,0xC8,
+              0x89,0x8F,0xD4,0x01,0x00,0x00)) 'bit 15 is inverse hitscan; bit 13 mirrors hitscan'
+Assert-BytesAtRva $exeBytes $layout 0x8025B3 `
+    ([byte[]](0x45,0x33,0xFF,0x4C,0x8B,0x69,0x60,0x4D,0x85,0xED,0x74,0x6F,
+              0x4C,0x39,0xB9,0x58,0x01,0x00,0x00,0x74,0x66)) 'special lifecycle requires runtime explosion pointer'
+Assert-BytesAtRva $exeBytes $layout 0x80262E `
+    ([byte[]](0x49,0x8B,0xC7,0x4C,0x8D,0x9C,0x24,0x30,0x01,0x00,0x00)) 'no explosion returns before ignored-return visual call'
+Assert-BytesAtRva $exeBytes $layout 0x802654 ([byte[]](0x5D,0xC3)) 'special lifecycle early-return epilogue'
+
 # HandleHits marks damage submission handled. Both normal actor and fallback
 # damage paths in Projectile::ProcessImpacts skip already-handled ImpactData.
 # Our visual gate waits for marker=1 even if the queue completed first, and
@@ -76,7 +96,7 @@ if (-not $RuntimeOnly) {
         'TryPrepareHit\s*\(', 'RunDamageDispatch\s*\(', 'DamageDispatchScope::MarkDeferred\s*\(',
         'g_deferredImpacts\.Register\s*\(', 'g_deferredImpacts\.Complete\s*\(',
         'g_deferredImpacts\.Consume\s*\(', 'VisualGateAction::Wait',
-        'kDestroyAfterHit', 'kChainShatter', 'before\.reset\s*\(',
+        'HasUnsupportedDeferredLifecycle\(a_projectile\)', 'before\.reset\s*\(',
         'impact\s*&&\s*impact->unk48\s*==\s*1',
         'arrowVtable\.write_vfunc\s*\(\s*ProcessImpactsVtableIndex')) {
         if ($queuedHookCode -notmatch $required) { throw "Missing queued-damage production contract: $required" }
@@ -86,6 +106,11 @@ if (-not $RuntimeOnly) {
         throw 'Queued registration must precede submission and pending visuals must not call original consumer'
     }
     if ($queuedHookCode -match 'unk48\s*=(?!=)') { throw 'Hooks must not clear or rewrite native handled marker' }
+    $lifecycleCode = Remove-CppComments (Get-Content -LiteralPath (Join-Path $repoRoot 'src/ProjectileLifecycle.h') -Raw)
+    if ($lifecycleCode -notmatch 'data\.explosion\s*!=\s*nullptr\s*\|\|\s*data\.flags\.any\(RE::Projectile::Flags::kChainShatter\)' -or
+        $lifecycleCode -match 'kDestroyAfterHit') {
+        throw 'Ordinary non-hitscan arrows must not be excluded by bit 15; special explosion/chain lifecycles remain excluded'
+    }
 }
 
 $queuedDamageProof = [ordered]@{
@@ -97,7 +122,9 @@ $queuedDamageProof = [ordered]@{
     visualGate = '209891 vtable[0xAC] -> 0x7DDEC0'
     normalFalseReturnExitsWithoutCleanup = $true
     nativeHandledMarkerPreventsDamageReplay = $true
-    destroyAfterHitExcluded = $true
+    ordinaryDestroyAfterHitFlagAllowed = $true
+    explosionAndChainShatterExcluded = $true
+    arrowInitializationProvesBit15IsInverseHitscan = $true
     queueDrainOrderingAssumed = $false
     runtimeGameplayVerified = $false
 }

@@ -46,7 +46,9 @@ Before launching, run `tools/verify-runtime-hook.ps1`. It must report
     above 50% to below 50%; it must use the lower actual post-hit health.
 14. Confirm no projectile lingers after queued damage. A rare visual deferral is
     allowed until damage finishes; canceled/ambiguous paths preserve vanilla.
-    Special explosive/destroy-after-hit and chain-shatter arrows remain vanilla.
+    Arrows with an actual runtime explosion and chain-shatter arrows remain vanilla.
+    Ordinary arrows carrying `kDestroyAfterHit` alone must enter queued tracking
+    and follow the normal bounce/stick policy (0.3.3 regression).
 15. Reload the disposable save and repeat a short matrix; explicit cross-save
     lifecycle acceptance remains unverified until this is tested.
 

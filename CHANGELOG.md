@@ -2,6 +2,27 @@
 
 All notable changes follow Keep a Changelog. Versions use Semantic Versioning.
 
+## [0.3.4] - 2026-09-05
+
+### Fixed
+
+- Admit ordinary non-hitscan arrows to queued impact tracking. Version 0.3.3
+  incorrectly excluded every `kDestroyAfterHit` projectile, although Skyrim's
+  arrow initialization sets that flag on normal ballistic arrows. The special
+  ignored-return lifecycle actually requires a runtime explosion pointer.
+- Keep actual explosion and chain-shatter paths vanilla without weakening
+  processed/destroyed, handled-marker or complete impact-identity guards.
+
+### Added
+
+- Exact-runtime initialization/explosion-entry byte proofs and 16 native
+  projectile-layout regression cases calling the production lifecycle helper.
+- Bounded queued-registration telemetry with lifecycle flags and explicit
+  capture rejection reasons instead of only an ambiguous missing-impact line.
+
+This remains a test candidate. The 0.3.3 player log and executable inspection
+establish the defect; 0.3.4 requires a fresh in-game visual/damage matrix.
+
 ## [0.3.3] - 2026-09-05
 
 ### Fixed

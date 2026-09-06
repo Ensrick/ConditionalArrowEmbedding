@@ -10,6 +10,7 @@ $scratch = Join-Path $repo 'build/release/audit-negative-control'
 $cases = @(
     @{Name='missing-submission'; Old='QueueSubmissionCallOffset = 0xA7'; New='QueueSubmissionCallOffset = 0xA6'},
     @{Name='missing-visual-consumer'; Old='g_deferredImpacts.Consume('; New='g_deferredImpacts.Other('},
+    @{Name='missing-lifecycle-guard'; Old='HasUnsupportedDeferredLifecycle(a_projectile)'; New='false'},
     @{Name='missing-handled-barrier'; Old='impact && impact->unk48 == 1'; New='impact && impact->unk48 == 0'}
 )
 foreach ($case in $cases) {

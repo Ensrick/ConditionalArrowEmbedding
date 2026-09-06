@@ -101,13 +101,16 @@ Pending state is mutex-protected, fixed at 256 records and expires after two
 seconds of steady-clock time. Duplicate ambiguous submissions are rejected;
 an actual consumer requeue keeps its original deadline. The map holds no engine
 object references and serializes nothing. Canceled, stale, capacity-limited or
-expired hits preserve vanilla. Destroy-after-hit/chain-shatter paths never wait,
+expired hits preserve vanilla. Runtime-explosion/chain-shatter paths never wait,
 because a special native caller destroys them regardless of the visual return.
+The runtime explosion pointer, not `kDestroyAfterHit` alone, identifies this
+unsupported path: normal non-hitscan arrow initialization sets that flag too.
 Explicit save-load invalidation is not implemented; current handle/stamp guards
 and expiry are not a claim of tested cross-load lifecycle behavior.
 
-Default runtime telemetry is bounded to twelve first-occurrence messages per
+Default runtime telemetry is bounded to fourteen first-occurrence messages per
 session, including classification, damage submission/completion and visual
-gating. Detailed per-hit logging is opt-in. Host tests and the exact executable
+gating. Registration records lifecycle flags and capture failures name the
+failed guard. Detailed per-hit logging is opt-in. Host tests and the exact executable
 audit establish source/ABI/control-flow properties, not actual gameplay
 acceptance. See `QUEUED-DAMAGE-REGRESSION.md` for the failure evidence and limits.
