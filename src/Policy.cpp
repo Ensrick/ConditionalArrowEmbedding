@@ -67,9 +67,12 @@ ImpactAction DecideImpact(const ImpactContext &a_context) noexcept {
 	if (a_context.region == HitRegion::Head) {
 		return ImpactAction::Bounce;
 	}
-	if (a_context.region != HitRegion::Body || !std::isfinite(a_context.healthRatioAfter)) {
+	if (!std::isfinite(a_context.healthRatioAfter)) {
 		return ImpactAction::PreserveVanilla;
 	}
+	// Above the body threshold, both head and body rules select bounce. Missing
+	// limb/node metadata must not make a healthy living humanoid retain arrows.
+	// Below it, unknown locations remain vanilla because a head hit is unproven.
 	return a_context.healthRatioAfter >= a_context.bodyStickBelowHealthRatio ? ImpactAction::Bounce
 	                                                                         : ImpactAction::PreserveVanilla;
 }

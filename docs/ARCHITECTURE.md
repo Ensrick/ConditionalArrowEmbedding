@@ -48,6 +48,12 @@ that otherwise carry only `ActorTypeNPC`. Missing or contradictory metadata
 preserves vanilla behavior. Eligibility is captured before damage so death or
 life-state transitions cannot reclassify the struck target.
 
+Reanimation state is read via `Actor::AsActorState()->IsReanimated()`. A direct
+call to the inherited `Actor::IsReanimated()` is invalid in this multi-runtime
+build: 0.3.1 compiled it to read Actor+0xA8, while 1.7.104's ActorState base is
+Actor+0xC0 and its life-state word is Actor+0xC8. The synthetic native regression
+varies both words independently and verifies the actual helper and decision.
+
 Killing-blow detection deliberately precedes head/body threshold logic. The
 hook records that the actor was alive, calls the synchronous engine damage
 routine, then trusts the post-hit `Actor::IsDead()` result. It intentionally
@@ -58,7 +64,8 @@ essential-down actors remain nondead at this hook point.
 
 Head/eye classification first uses Skyrim's `HitData::damageLimb`. Node names
 from the projectile impact and a bounded ancestor walk are a fallback. Unknown
-locations preserve vanilla behavior.
+locations below 50% health preserve vanilla behavior; at 50% or more both
+possible region rules require bounce, so no location evidence is needed.
 
 When the policy selects bounce, both the missile-level result and the matched
 impact result are changed from an embedding result to `Bounce`. The match is
@@ -71,7 +78,8 @@ eligibility is based on the missile-wide result because that is the value
 when applying a bounce. No damage fields,
 actor values, projectile positions, inventory, forms, or save data are changed.
 
-Default runtime telemetry is bounded to five first-occurrence messages per game
+Default runtime telemetry is bounded to six first-occurrence messages per game
 session. It records the first normal-arrow route, first matched policy decision,
-first applied bounce, first missing-impact failure, and first handler exception.
+first applied bounce, first missing-impact failure, first handler exception,
+and player-specific eligibility including race and every classification gate.
 Per-hit detail remains opt-in through `debugLogging`.

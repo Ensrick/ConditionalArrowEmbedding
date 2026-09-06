@@ -18,7 +18,10 @@ Before launching, run `tools/verify-runtime-hook.ps1`. It must report
 5. Kill an actor with a body shot: vanilla embedding is preserved.
 6. Block an arrow and test an existing ricochet effect: vanilla behavior remains.
 7. Confirm the player and ordinary human, elf, Orc, Khajiit, and Argonian races
-   use the conditional rules.
+   use the conditional rules. Reproduce the reported failure with a full-health
+   Breton player in godmode receiving NPC arrows: arrows must bounce and the
+   bounded player eligibility line must show `livingHumanoid=true`,
+   `reanimated=false`. Repeat without godmode; it is not an eligibility exception.
 8. Confirm draugr, skeletons, vampires, ghosts, reanimated corpses, animals,
    Falmer/creatures, Daedra, dragons, giants/trolls, and Dwarven constructs all
    preserve vanilla embedding at both high and low remaining health.
@@ -33,6 +36,11 @@ Before launching, run `tools/verify-runtime-hook.ps1`. It must report
     matched hit must produce `first matched arrow decision`, and an eligible
     nonlethal test must produce `first conditional bounce applied`. With debug
     logging disabled, none of those categories may repeat during the session.
+
+Run `ActorStateAccessTests` before packaging. Its 144 synthetic memory layouts
+must show that actual reanimation state controls eligibility independently of
+the bytes that the old 0.3.1 build read. This is an ABI regression test, not an
+engine simulation or proof of visible arrow placement.
 
 Repeat the threshold tests with a controlled target whose health values can be
 read before and after each shot. Do not call the build stable until the matrix is

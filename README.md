@@ -20,8 +20,9 @@ projectile damage.
 - A body hit may remain embedded once the target is below 50% health.
 - A lethal body hit preserves Skyrim's normal impact result.
 - Blocked hits, existing ricochets, non-ballistic projectiles, already-dead targets,
-  unsupported target types, and impacts whose location cannot be classified
-  preserve vanilla behavior.
+  and unsupported target types preserve vanilla behavior. An unclassified
+  nonlethal hit bounces at 50% health or more; below that threshold it preserves
+  vanilla behavior.
 
 The plugin never forces an arrow to stick. It only changes an engine-selected
 `Stick` or `Impale` result to `Bounce` when one of the rules above requires it.
@@ -70,8 +71,9 @@ surrounding instruction bytes were verified against that executable.
 
 With normal logging, the DLL emits only first-occurrence runtime evidence: the
 first arrow routed through the hook, first complete policy decision, first
-conditional bounce, first missing-impact condition, and first handler failure.
-This is bounded to at most five messages per game session. Enable debug logging
+conditional bounce, first missing-impact condition, first handler failure, and
+the player's race and eligibility gates. This is bounded to at most six messages
+per game session. Enable debug logging
 only when a per-hit trace is needed.
 
 ## Build and test
@@ -86,7 +88,9 @@ executable and Address Library. It proves the normal owner-resolved arrow route,
 rejects the source-null regression site, verifies the post-damage mutation
 window, and checks that `ProcessImpacts` later consumes the impact result.
 
-Policy tests prove the requested decision matrix independently of Skyrim. A
+Policy tests prove the requested decision matrix independently of Skyrim. Native
+layout tests additionally verify that the reanimation check reads the 1.7.104
+runtime actor-state field, not the incompatible C++ base-class offset. A
 successful loader smoke test proves SKSE initialization and hook installation;
 actual arrow placement still requires in-game verification before a stable
 release.

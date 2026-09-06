@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ConditionalArrowEmbedding VERSION 0.3.1 LANGUAGES CXX)
+project(ConditionalArrowEmbedding VERSION 0.3.2 LANGUAGES CXX)
 
 if(MSVC)
     add_compile_options("/experimental:deterministic" "/pathmap:${CMAKE_SOURCE_DIR}=.")
@@ -35,6 +35,7 @@ add_commonlibsse_plugin(${PROJECT_NAME}
     SOURCES
         src/Hooks.cpp
         src/Hooks.h
+        src/ActorStateAccess.h
         src/PCH.h
         src/Plugin.cpp
         src/Version.h
@@ -51,6 +52,19 @@ target_link_libraries(ConditionalArrowEmbeddingTests PRIVATE ConditionalArrowEmb
 
 enable_testing()
 add_test(NAME PolicyTests COMMAND ConditionalArrowEmbeddingTests)
+
+add_executable(ConditionalArrowEmbeddingActorStateTests tests/ActorStateAccessTests.cpp)
+target_compile_features(ConditionalArrowEmbeddingActorStateTests PRIVATE cxx_std_23)
+target_compile_options(ConditionalArrowEmbeddingActorStateTests PRIVATE /W4 /WX)
+target_compile_definitions(ConditionalArrowEmbeddingActorStateTests PRIVATE ENABLE_COMMONLIBSSE_TESTING=1)
+target_include_directories(ConditionalArrowEmbeddingActorStateTests PRIVATE src)
+target_precompile_headers(ConditionalArrowEmbeddingActorStateTests PRIVATE src/PCH.h)
+target_link_libraries(ConditionalArrowEmbeddingActorStateTests PRIVATE CommonLibSSE ConditionalArrowEmbeddingCore)
+add_test(NAME ActorStateAccessTests COMMAND ConditionalArrowEmbeddingActorStateTests)
+add_test(NAME ActorStateSourceContract
+    COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/ActorStateSourceContract.ps1"
+        -SourceRoot "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 if(NOT DEFINED OUTPUT_FOLDER)
     set(OUTPUT_FOLDER "${CMAKE_BINARY_DIR}/stage")

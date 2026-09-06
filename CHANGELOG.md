@@ -2,6 +2,29 @@
 
 All notable changes follow Keep a Changelog. Versions use Semantic Versioning.
 
+## [0.3.2] - 2026-09-05
+
+### Fixed
+
+- Read reanimation state through the runtime-aware `AsActorState()` accessor.
+  The shipped multi-runtime 0.3.1 DLL read unrelated bytes at Actor+0xA8;
+  1.7.104 stores the life-state word at Actor+0xC8. This could incorrectly
+  exclude a living player from conditional arrow rules.
+- Apply the high-health bounce rule even when hit location is unavailable:
+  both a head hit and a body hit require bounce at 50% health or more.
+  Unknown locations below the threshold still preserve vanilla behavior.
+
+### Added
+
+- 144 synthetic native-layout regression cases, coupled to the real eligibility
+  and full-health player policy; separate player/NPC region-health-lethality matrix.
+- One bounded player-specific telemetry line listing race and every eligibility
+  gate, so a future exclusion has a diagnosable reason rather than a lone false flag.
+
+This repair is supported by the user's 0.3.1 runtime log and compiled-offset
+inspection. A fresh in-game visual/damage matrix is still required; native
+layout tests and a successful build are not an in-game acceptance test.
+
 ## [0.3.1] - 2026-09-05
 
 ### Fixed

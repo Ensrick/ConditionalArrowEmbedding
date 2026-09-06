@@ -1,5 +1,6 @@
 #include "PCH.h"
 
+#include "ActorStateAccess.h"
 #include "Hooks.h"
 #include "Policy.h"
 
@@ -19,6 +20,7 @@ enum class TelemetryEvent : std::uint32_t {
 	BounceApplied = 1U << 2U,
 	MissingImpact = 1U << 3U,
 	HandlerFailure = 1U << 4U,
+	PlayerEligibility = 1U << 5U,
 };
 
 std::atomic_uint32_t g_loggedTelemetry{};
@@ -65,7 +67,7 @@ std::atomic_uint32_t g_loggedTelemetry{};
 	    .actorTypeGhost = HasSkyrimKeyword(a_target, ActorTypeGhostFormID),
 	    .actorTypeUndead = a_target.HasKeywordWithType(RE::DefaultObjectID::kKeywordUndead),
 	    .ghost = a_target.IsGhost(),
-	    .reanimated = a_target.IsReanimated(),
+	    .reanimated = IsRuntimeReanimated(a_target),
 	    .excludedVanillaUtilityRace = raceFormID == InvisibleRaceFormID || raceFormID == ManakinRaceFormID,
 	};
 }
@@ -152,8 +154,7 @@ void ApplyPostDamageDecision(RE::Actor &a_target, RE::HitData &a_hitData, const 
 	    .targetWasAlive = a_targetWasAlive,
 	    .targetReportsDead = engineReportsDead,
 	});
-	if (g_config.debugLogging &&
-	    a_hitData.flags.any(RE::HitData::Flag::kFatal) != engineReportsDead) {
+	if (g_config.debugLogging && a_hitData.flags.any(RE::HitData::Flag::kFatal) != engineReportsDead) {
 		logger::debug("arrow {:08X} target {:08X}: precomputed fatal flag disagrees with post-hit "
 		              "engine death state; using engine state",
 		              a_projectile.GetFormID(), a_target.GetFormID());
@@ -215,8 +216,20 @@ struct ProjectileActorHitHook {
 		// callbacks are allowed to release references.
 		auto source = a_hitData.sourceRef.get();
 		auto *projectile = source ? source->As<RE::ArrowProjectile>() : nullptr;
-		const bool targetIsLivingHumanoid = a_target && projectile &&
-		                                    IsLivingHumanoidTarget(CollectTargetTypeTraits(*a_target));
+		const auto traits = a_target && projectile ? CollectTargetTypeTraits(*a_target) : TargetTypeTraits{};
+		const bool targetIsLivingHumanoid = IsLivingHumanoidTarget(traits);
+		if (a_target && projectile && a_target->IsPlayerRef() &&
+		    ClaimTelemetry(TelemetryEvent::PlayerEligibility)) {
+			const auto *race = a_target->GetRace();
+			logger::info("runtime telemetry: player eligibility race={:08X} livingHumanoid={} "
+			             "hasRace={} npc={} animal={} creature={} daedra={} dragon={} dwarven={} "
+			             "ghostKeyword={} undead={} ghostState={} reanimated={} utilityRace={}",
+			             race ? race->GetFormID() : 0, targetIsLivingHumanoid, traits.hasRace,
+			             traits.actorTypeNPC, traits.actorTypeAnimal, traits.actorTypeCreature,
+			             traits.actorTypeDaedra, traits.actorTypeDragon, traits.actorTypeDwarven,
+			             traits.actorTypeGhost, traits.actorTypeUndead, traits.ghost, traits.reanimated,
+			             traits.excludedVanillaUtilityRace);
+		}
 
 		Func(a_target, a_hitData);
 		try {
@@ -260,8 +273,7 @@ bool Install(Config a_config) {
 	const REL::Relocation<std::uintptr_t> physicalHitDispatcher{REL::ID(PhysicalHitDispatcherAddressId)};
 	const auto callsite = physicalHitDispatcher.address() + PhysicalHitCallOffset;
 	if (!IsExpectedPhysicalHitCallsite(callsite)) {
-		logger::critical("physical-hit callsite signature mismatch at 0x{:X}; hook not installed",
-		                 callsite);
+		logger::critical("physical-hit callsite signature mismatch at 0x{:X}; hook not installed", callsite);
 		return false;
 	}
 
@@ -269,9 +281,8 @@ bool Install(Config a_config) {
 	auto &trampoline = SKSE::GetTrampoline();
 	ProjectileActorHitHook::Func = trampoline.write_call<5>(callsite, ProjectileActorHitHook::Thunk);
 	logger::info("post-damage physical-hit hook installed at ID {} + 0x{:X}; body threshold={:.3f}; "
-	             "default runtime telemetry is bounded to five first-occurrence messages",
-	             PhysicalHitDispatcherAddressId, PhysicalHitCallOffset,
-	             g_config.bodyStickBelowHealthRatio);
+	             "default runtime telemetry is bounded to six first-occurrence messages",
+	             PhysicalHitDispatcherAddressId, PhysicalHitCallOffset, g_config.bodyStickBelowHealthRatio);
 	return true;
 }
 } // namespace ConditionalArrowEmbedding::Hooks

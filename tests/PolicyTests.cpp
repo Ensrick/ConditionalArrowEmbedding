@@ -67,8 +67,7 @@ int main() {
 		}
 	}
 	{
-		Expect(WasKilledByHit(PostDamageState{
-		           .targetWasAlive = false, .targetReportsDead = true}) == false,
+		Expect(WasKilledByHit(PostDamageState{.targetWasAlive = false, .targetReportsDead = true}) == false,
 		       "pre-existing death is not attributed to hit");
 		Expect(WasKilledByHit(PostDamageState{.targetReportsDead = true}), "engine dead signal");
 		Expect(!WasKilledByHit(PostDamageState{}), "surviving target is nonlethal");
@@ -144,7 +143,33 @@ int main() {
 		Expect(DecideImpact(context) == ImpactAction::PreserveVanilla, "invalid health fails open");
 		context.region = HitRegion::Unknown;
 		context.healthRatioAfter = 1.0;
-		Expect(DecideImpact(context) == ImpactAction::PreserveVanilla, "unknown region fails open");
+		Expect(DecideImpact(context) == ImpactAction::Bounce, "unknown region at full health bounces");
+		context.healthRatioAfter = 0.5;
+		Expect(DecideImpact(context) == ImpactAction::Bounce, "unknown region at threshold bounces");
+		context.healthRatioAfter = 0.4999;
+		Expect(DecideImpact(context) == ImpactAction::PreserveVanilla,
+		       "unknown region below threshold fails open");
+	}
+	{
+		// Full-health player/godmode reproducer: health does not have to fall for
+		// the rule to apply, and head/body metadata cannot defeat it.
+		for (const auto region : {HitRegion::Unknown, HitRegion::Head, HitRegion::Body}) {
+			for (const auto player : {false, true}) {
+				for (const auto health : {0.0, 0.4999, 0.5, 0.5001, 1.0}) {
+					for (const auto killed : {false, true}) {
+						auto context = BodyAt(health);
+						context.region = region;
+						context.targetIsPlayer = player;
+						context.targetKilledByHit = killed;
+						const auto expected = !killed && (region == HitRegion::Head || health >= 0.5)
+						                          ? ImpactAction::Bounce
+						                          : ImpactAction::PreserveVanilla;
+						Expect(DecideImpact(context) == expected,
+						       "player/NPC region-health-lethality matrix");
+					}
+				}
+			}
+		}
 	}
 
 	const std::vector<std::string> tokens{"head", "skull", "face", "eye", "jaw", "brow", "nose"};
